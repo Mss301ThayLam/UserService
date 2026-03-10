@@ -1,3 +1,47 @@
 spring:
   application:
     name: user-service
+  mongodb:
+    uri: mongodb+srv://thanhminhtriong_db_user:mlwpVuTck1UXBgT8@cluster0.p9uzj4b.mongodb.net/SkillBridgeDB?retryWrites=true&w=majority
+
+  # Security - OAuth2 Resource Server with Keycloak
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/micropc
+          jwk-set-uri: http://localhost:8080/realms/micropc/protocol/openid-connect/certs
+
+# Server Configuration
+server:
+  port: 8083
+  servlet:
+    context-path: /
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.mss.user_service: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.data.mongodb: DEBUG
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# Swagger/OpenAPI Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operations-sorter: method
+    tags-sorter: alpha

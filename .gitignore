@@ -1,8 +1,15 @@
-HELP.md
+HELP_pt-BR.md
 target/
-.mvn/wrapper/maven-wrapper.jar
+!.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+### Documentation ###
+docs/
+
+### Test Scripts ###
+test-api.bat
+test-api.sh
 
 ### STS ###
 .apt_generated
@@ -31,3 +38,21 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Maven ###
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+### Environment Files ###
+.env
+.env.local
+.env.*.local
+
+### Logs ###
+logs/
+*.log
+*.log.*
+
+### OS ###
+.DS_Store
+Thumbs.db
