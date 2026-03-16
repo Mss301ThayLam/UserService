@@ -6,7 +6,7 @@ target/
 
 ### Documentation ###
 docs/
-
+postman/
 ### Test Scripts ###
 test-api.bat
 test-api.sh
