@@ -36,6 +36,7 @@ public class UserProfileResponse {
     private UserStatus status;
     private Integer totalOrders;
     private Double totalSpent;
+    private String avatarUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime lastLoginAt;
