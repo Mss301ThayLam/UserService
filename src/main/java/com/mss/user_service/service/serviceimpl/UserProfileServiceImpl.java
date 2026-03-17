@@ -30,6 +30,10 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.mss.user_service.client.OrderClient;
+import com.mss.user_service.payloads.requests.CartRequest;
+import feign.FeignException;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -44,6 +48,7 @@ public class UserProfileServiceImpl implements UserProfileService {
     private final UserProfileRepository userProfileRepository;
     private final UserProfileMapper userProfileMapper;
     private final MongoTemplate mongoTemplate;
+    private final OrderClient orderClient;
 
     private static final int MAX_ADDRESSES = 5;
 
@@ -93,7 +98,9 @@ public class UserProfileServiceImpl implements UserProfileService {
                             .build();
 
                     log.info("Created new user profile for keycloakUserId: {}", keycloakUserId);
-                    return userProfileRepository.save(newProfile);
+                    UserProfile savedProfile = userProfileRepository.save(newProfile);
+                    createDefaultCartForUser(keycloakUserId);
+                    return savedProfile;
                 });
     }
 
@@ -489,7 +496,27 @@ public class UserProfileServiceImpl implements UserProfileService {
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        return userProfileRepository.save(profile);
+        UserProfile savedProfile = userProfileRepository.save(profile);
+        if (savedProfile.getKeycloakUserId() != null) {
+            createDefaultCartForUser(savedProfile.getKeycloakUserId());
+        }
+        return savedProfile;
+    }
+
+    private void createDefaultCartForUser(String userId) {
+        try {
+            CartRequest cartRequest = CartRequest.builder()
+                    .userId(userId)
+                    .cartType("NORMAL")
+                    .status("ACTIVE")
+                    .build();
+            orderClient.createCart(cartRequest);
+            log.info("Successfully created default cart for user: {}", userId);
+        } catch (FeignException e) {
+            log.error("Failed to create default cart for user {}: {}", userId, e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error creating cart for user {}: {}", userId, e.getMessage());
+        }
     }
 }
 
