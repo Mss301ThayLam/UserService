@@ -35,6 +35,7 @@ public class UserProfileMapper {
                 .status(userProfile.getStatus())
                 .totalOrders(userProfile.getTotalOrders())
                 .totalSpent(userProfile.getTotalSpent())
+                .avatarUrl(userProfile.getAvatarUrl())
                 .createdAt(userProfile.getCreatedAt())
                 .updatedAt(userProfile.getUpdatedAt())
                 .lastLoginAt(userProfile.getLastLoginAt())

@@ -3,6 +3,7 @@ package com.mss.user_service.service;
 import com.mss.user_service.dto.AddressDto;
 import com.mss.user_service.dto.UserPreferencesDto;
 import com.mss.user_service.entity.UserProfile;
+import com.mss.user_service.payloads.requests.AdminCreateUserRequest;
 import com.mss.user_service.payloads.requests.CompleteProfileRequest;
 import com.mss.user_service.payloads.requests.UpdateProfileRequest;
 import com.mss.user_service.payloads.response.ProfileCompletionResponse;
@@ -81,5 +82,20 @@ public interface UserProfileService {
      * Soft delete user (admin)
      */
     void softDeleteUser(String keycloakUserId);
+
+    /**
+     * Update avatar URL
+     */
+    UserProfile updateAvatarUrl(String keycloakUserId, String avatarUrl);
+
+    /**
+     * Search users by keyword and status with pagination (admin)
+     */
+    Page<UserProfile> searchUsers(String keyword, String status, Pageable pageable);
+
+    /**
+     * Admin creates a new user profile
+     */
+    UserProfile adminCreateUser(AdminCreateUserRequest request);
 }
 

@@ -5,12 +5,14 @@ import com.mss.user_service.dto.UserPreferencesDto;
 import com.mss.user_service.entity.Address;
 import com.mss.user_service.entity.UserPreferences;
 import com.mss.user_service.entity.UserProfile;
+import com.mss.user_service.enums.Gender;
 import com.mss.user_service.enums.UserStatus;
 import com.mss.user_service.exceptions.InvalidAddressIndexException;
 import com.mss.user_service.exceptions.MaxAddressLimitException;
 import com.mss.user_service.exceptions.ProfileAlreadyCompletedException;
 import com.mss.user_service.exceptions.UserNotFoundException;
 import com.mss.user_service.mapper.UserProfileMapper;
+import com.mss.user_service.payloads.requests.AdminCreateUserRequest;
 import com.mss.user_service.payloads.requests.CompleteProfileRequest;
 import com.mss.user_service.payloads.requests.UpdateProfileRequest;
 import com.mss.user_service.payloads.response.ProfileCompletionResponse;
@@ -19,14 +21,20 @@ import com.mss.user_service.service.UserProfileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +43,7 @@ public class UserProfileServiceImpl implements UserProfileService {
 
     private final UserProfileRepository userProfileRepository;
     private final UserProfileMapper userProfileMapper;
+    private final MongoTemplate mongoTemplate;
 
     private static final int MAX_ADDRESSES = 5;
 
@@ -409,6 +418,78 @@ public class UserProfileServiceImpl implements UserProfileService {
     private Double calculateInitialCompletion() {
         // New user has: email, firstName, lastName = 3/7 fields
         return Math.round((3.0 / 7.0) * 100 * 100.0) / 100.0;
+    }
+
+    @Override
+    @Transactional
+    public UserProfile updateAvatarUrl(String keycloakUserId, String avatarUrl) {
+        log.info("Updating avatar URL for keycloakUserId: {}", keycloakUserId);
+        UserProfile profile = getUserProfile(keycloakUserId);
+        profile.setAvatarUrl(avatarUrl);
+        profile.setUpdatedAt(LocalDateTime.now());
+        return userProfileRepository.save(profile);
+    }
+
+    @Override
+    public Page<UserProfile> searchUsers(String keyword, String status, Pageable pageable) {
+        log.info("Searching users with keyword={}, status={}", keyword, status);
+
+        Criteria criteria = new Criteria();
+        List<Criteria> conditions = new ArrayList<>();
+
+        if (keyword != null && !keyword.isBlank()) {
+            String regex = ".*" + Pattern.quote(keyword) + ".*";
+            conditions.add(new Criteria().orOperator(
+                    Criteria.where("username").regex(regex, "i"),
+                    Criteria.where("email").regex(regex, "i"),
+                    Criteria.where("firstName").regex(regex, "i"),
+                    Criteria.where("lastName").regex(regex, "i")
+            ));
+        }
+
+        if (status != null && !status.isBlank()) {
+            conditions.add(Criteria.where("status").is(status));
+        }
+
+        if (!conditions.isEmpty()) {
+            criteria.andOperator(conditions.toArray(new Criteria[0]));
+        }
+
+        Query query = new Query(criteria).with(pageable);
+        List<UserProfile> users = mongoTemplate.find(query, UserProfile.class);
+        long total = mongoTemplate.count(Query.of(query).limit(-1).skip(-1), UserProfile.class);
+
+        return new PageImpl<>(users, pageable, total);
+    }
+
+    @Override
+    @Transactional
+    public UserProfile adminCreateUser(AdminCreateUserRequest request) {
+        log.info("Admin creating user with username: {}, email: {}", request.getUsername(), request.getEmail());
+
+        UserProfile profile = UserProfile.builder()
+                .keycloakUserId(null)
+                .username(request.getUsername())
+                .email(request.getEmail())
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .phoneNumber(request.getPhoneNumber())
+                .gender(request.getGender() != null ? Gender.valueOf(request.getGender()) : null)
+                .dateOfBirth(request.getDateOfBirth() != null ? LocalDate.parse(request.getDateOfBirth()) : null)
+                .emailVerified(false)
+                .profileCompleted(false)
+                .completionPercentage(0.0)
+                .status(UserStatus.ACTIVE)
+                .loyaltyPoints(0)
+                .totalOrders(0)
+                .totalSpent(0.0)
+                .shippingAddresses(new ArrayList<>())
+                .preferences(UserPreferences.createDefault())
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        return userProfileRepository.save(profile);
     }
 }
 

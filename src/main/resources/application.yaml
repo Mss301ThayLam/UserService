@@ -1,20 +1,24 @@
 spring:
   application:
-    name: user-service
+    name: ${SPRING_APPLICATION_NAME}
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
   mongodb:
-    uri: mongodb+srv://thanhminhtriong_db_user:mlwpVuTck1UXBgT8@cluster0.p9uzj4b.mongodb.net/SkillBridgeDB?retryWrites=true&w=majority
+    uri: ${MONGODB_URI}
 
   # Security - OAuth2 Resource Server with Keycloak
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8080/realms/micropc
-          jwk-set-uri: http://localhost:8080/realms/micropc/protocol/openid-connect/certs
+          issuer-uri: ${KEYCLOAK_ISSUER_URI}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI}
 
 # Server Configuration
 server:
-  port: 8083
+  port: ${SERVER_PORT}
   servlet:
     context-path: /
 
@@ -46,10 +50,16 @@ springdoc:
     operations-sorter: method
     tags-sorter: alpha
 
+# Azure Blob Storage Configuration
+azure:
+  storage:
+    connection-string: ${AZURE_STORAGE_CONNECTION_STRING}
+    container-name: ${AZURE_STORAGE_CONTAINER_NAME}
+
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_DEFAULT_ZONE}
     register-with-eureka: true
     fetch-registry: true
   instance:

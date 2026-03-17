@@ -5,12 +5,14 @@ import com.mss.user_service.dto.UserPreferencesDto;
 import com.mss.user_service.entity.UserProfile;
 import com.mss.user_service.mapper.UserProfileMapper;
 import com.mss.user_service.payloads.requests.AddLoyaltyPointsRequest;
+import com.mss.user_service.payloads.requests.AdminCreateUserRequest;
 import com.mss.user_service.payloads.requests.CompleteProfileRequest;
 import com.mss.user_service.payloads.requests.UpdateProfileRequest;
 import com.mss.user_service.payloads.response.BaseResponse;
 import com.mss.user_service.payloads.response.LoyaltyPointsResponse;
 import com.mss.user_service.payloads.response.ProfileCompletionResponse;
 import com.mss.user_service.payloads.response.UserProfileResponse;
+import com.mss.user_service.service.AzureStorageService;
 import com.mss.user_service.service.UserProfileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -21,14 +23,17 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -39,6 +44,7 @@ public class UserProfileController {
 
     private final UserProfileService userProfileService;
     private final UserProfileMapper userProfileMapper;
+    private final AzureStorageService azureStorageService;
 
     // ==================== USER ENDPOINTS ====================
 
@@ -210,7 +216,98 @@ public class UserProfileController {
         ));
     }
 
+    // ==================== AVATAR MANAGEMENT ====================
+
+    @PostMapping(value = "/users/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload avatar", description = "Upload user avatar image (jpg, png, webp, max 5MB)")
+    public ResponseEntity<BaseResponse> uploadAvatar(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam("file") MultipartFile file) {
+
+        validateImageFile(file);
+
+        String keycloakUserId = jwt.getSubject();
+        String extension = getFileExtension(file.getOriginalFilename());
+        String filename = UUID.randomUUID() + "." + extension;
+
+        UserProfile profile = userProfileService.getUserProfile(keycloakUserId);
+        if (profile.getAvatarUrl() != null) {
+            azureStorageService.deleteFile(profile.getAvatarUrl());
+        }
+
+        String avatarUrl = azureStorageService.uploadFile(file, keycloakUserId, filename);
+        profile = userProfileService.updateAvatarUrl(keycloakUserId, avatarUrl);
+        UserProfileResponse response = userProfileMapper.toResponse(profile);
+
+        return ResponseEntity.ok(new BaseResponse(
+                "Avatar uploaded successfully",
+                String.valueOf(HttpStatus.OK.value()),
+                response
+        ));
+    }
+
+    @DeleteMapping("/users/me/avatar")
+    @Operation(summary = "Delete avatar", description = "Remove user avatar")
+    public ResponseEntity<BaseResponse> deleteAvatar(@AuthenticationPrincipal Jwt jwt) {
+        String keycloakUserId = jwt.getSubject();
+        UserProfile profile = userProfileService.getUserProfile(keycloakUserId);
+
+        if (profile.getAvatarUrl() != null) {
+            azureStorageService.deleteFile(profile.getAvatarUrl());
+        }
+
+        profile = userProfileService.updateAvatarUrl(keycloakUserId, null);
+        UserProfileResponse response = userProfileMapper.toResponse(profile);
+
+        return ResponseEntity.ok(new BaseResponse(
+                "Avatar deleted successfully",
+                String.valueOf(HttpStatus.OK.value()),
+                response
+        ));
+    }
+
     // ==================== ADMIN ENDPOINTS ====================
+
+    @GetMapping("/admin/users/search")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Search users (Admin)", description = "Search users by keyword and filter by status with pagination")
+    public ResponseEntity<BaseResponse> searchUsers(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<UserProfile> userPage = userProfileService.searchUsers(keyword, status, pageable);
+        Page<UserProfileResponse> responsePage = userPage.map(userProfileMapper::toResponse);
+
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("content", responsePage.getContent());
+        responseData.put("page", responsePage.getNumber());
+        responseData.put("size", responsePage.getSize());
+        responseData.put("totalElements", responsePage.getTotalElements());
+        responseData.put("totalPages", responsePage.getTotalPages());
+
+        return ResponseEntity.ok(new BaseResponse(
+                "Users retrieved successfully",
+                String.valueOf(HttpStatus.OK.value()),
+                responseData
+        ));
+    }
+
+    @PostMapping("/admin/users")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Create user (Admin)", description = "Admin creates a new user profile")
+    public ResponseEntity<BaseResponse> createUser(@Valid @RequestBody AdminCreateUserRequest request) {
+        UserProfile profile = userProfileService.adminCreateUser(request);
+        UserProfileResponse response = userProfileMapper.toResponse(profile);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(new BaseResponse(
+                "User created successfully",
+                String.valueOf(HttpStatus.CREATED.value()),
+                response
+        ));
+    }
 
     @GetMapping("/admin/users/{keycloakUserId}")
     @PreAuthorize("hasRole('ADMIN')")
@@ -263,6 +360,23 @@ public class UserProfileController {
                 String.valueOf(HttpStatus.OK.value()),
                 null
         ));
+    }
+
+    // ==================== HELPER METHODS ====================
+
+    private void validateImageFile(MultipartFile file) {
+        if (file.isEmpty()) throw new IllegalArgumentException("File is empty");
+        if (file.getSize() > 5 * 1024 * 1024) throw new IllegalArgumentException("File size exceeds 5MB");
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new IllegalArgumentException("Only image files are allowed");
+        }
+    }
+
+    private String getFileExtension(String filename) {
+        if (filename == null) return "jpg";
+        int lastDot = filename.lastIndexOf(".");
+        return lastDot > 0 ? filename.substring(lastDot + 1) : "jpg";
     }
 
     // ==================== INTERNAL ENDPOINTS ====================

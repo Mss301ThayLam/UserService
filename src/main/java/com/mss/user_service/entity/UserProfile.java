@@ -71,6 +71,8 @@ public class UserProfile {
     @Builder.Default
     private Double totalSpent = 0.0;
 
+    private String avatarUrl;
+
     // Timestamps
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
